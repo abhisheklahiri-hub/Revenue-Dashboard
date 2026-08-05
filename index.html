@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Show Revenue Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2128;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #7d8590;
+    --accent: #388bfd;
+    --accent2: #3fb950;
+    --negative: #f85149;
+    --positive: #3fb950;
+    --yellow: #d29922;
+    --tab-active: #388bfd;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; min-height: 100vh; }
+  
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .header h1 { font-size: 18px; font-weight: 600; color: var(--text); }
+  .header-meta { color: var(--text-muted); font-size: 12px; }
+
+  .tab-bar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; gap: 0; }
+  .tab { padding: 12px 20px; cursor: pointer; color: var(--text-muted); font-size: 13px; font-weight: 500; border-bottom: 2px solid transparent; transition: all 0.15s; white-space: nowrap; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--tab-active); border-bottom-color: var(--tab-active); }
+
+  .content { padding: 20px 24px; max-width: 1400px; }
+  
+  /* Filters */
+  .filters { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+  .filter-group { display: flex; flex-direction: column; gap: 4px; }
+  .filter-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  select, .show-chips { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; outline: none; }
+  select:focus { border-color: var(--accent); }
+  .show-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; max-width: 700px; }
+  .chip { padding: 3px 10px; border-radius: 20px; font-size: 12px; cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--text-muted); transition: all 0.15s; }
+  .chip.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+  /* KPI Cards */
+  .kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .kpi-show { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpi-rev { font-size: 22px; font-weight: 700; color: var(--text); }
+  .kpi-change { font-size: 12px; margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+  .kpi-change.pos { color: var(--positive); }
+  .kpi-change.neg { color: var(--negative); }
+  .kpi-change.neu { color: var(--text-muted); }
+
+  /* Chart area */
+  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+  .chart-title { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 14px; }
+  .chart-wrap { position: relative; }
+
+  /* Table */
+  .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
+  .table-header { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: var(--surface2); padding: 10px 14px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-align: left; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+  td { padding: 9px 14px; font-size: 13px; border-bottom: 1px solid var(--border); color: var(--text); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+  .badge-pos { color: var(--positive); font-weight: 600; }
+  .badge-neg { color: var(--negative); font-weight: 600; }
+
+  /* Loading */
+  .loading { display: flex; align-items: center; justify-content: center; height: 200px; color: var(--text-muted); font-size: 14px; }
+  .spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 10px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* FY Summary */
+  .fy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .fy-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .fy-show { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; font-weight: 600; }
+  .fy-rev { font-size: 28px; font-weight: 700; }
+  .fy-bar-wrap { margin-top: 10px; background: var(--surface2); border-radius: 3px; height: 4px; overflow: hidden; }
+  .fy-bar { height: 100%; background: var(--accent); border-radius: 3px; }
+  .fy-sub { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+  
+  /* Section header */
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .section-title { font-size: 15px; font-weight: 600; }
+
+  /* Bucket chart colors */
+  .bucket-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .bl-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); }
+  .bl-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+  .no-data { color: var(--text-muted); font-size: 13px; padding: 30px; text-align: center; }
+  
+  @media (max-width: 600px) {
+    .content { padding: 12px; }
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .tab { padding: 10px 12px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📺 Show Revenue Dashboard</h1>
+  <span class="header-meta" id="dateRange">Loading...</span>
+</div>
+
+<div class="tab-bar">
+  <div class="tab active" onclick="switchTab('daily')">Daily Revenue</div>
+  <div class="tab" onclick="switchTab('monthly')">Monthly</div>
+  <div class="tab" onclick="switchTab('fy')">FY To Date</div>
+  <div class="tab" onclick="switchTab('bucket')">10% Bucket</div>
+</div>
+
+<div class="content">
+  <div id="app">
+    <div class="loading"><div class="spinner"></div>Loading data...</div>
+  </div>
+</div>
+
+<script src="daily_data.js"></script>
+<script src="block_data.js"></script>
+<script>
+// ============================================================
+// DATA & STATE
+// ============================================================
+let activeTab = 'daily';
+let dailyData = [], blockData = [];
+let selectedShows = [];
+let allShows = [];
+let selectedMonth = '';
+let allMonths = [];
+let chartInstances = {};
+
+const SHOW_COLORS = [
+  '#388bfd','#3fb950','#f0883e','#a371f7','#db6d28','#58a6ff',
+  '#56d364','#d29922','#ff7b72','#79c0ff'
+];
+
+const BUCKET_COLORS = [
+  '#1e3a5f','#1a4a6b','#155e75','#0e7490','#0891b2',
+  '#06b6d4','#22d3ee','#67e8f9','#a5f3fc','#cffafe'
+];
+
+const BUCKETS = ['0-10%','10-20%','20-30%','30-40%','40-50%','50-60%','60-70%','70-80%','80-90%','90-100%'];
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener('DOMContentLoaded', () => {
+  dailyData = window.DAILY_DATA || [];
+  blockData = window.BLOCK_DATA || [];
+  
+  allShows = [...new Set(dailyData.map(d => d.showShort))].sort();
+  selectedShows = [...allShows];
+  
+  const dates = dailyData.map(d => d.date).sort();
+  const months = [...new Set(dates.map(d => d.slice(0,7)))].sort();
+  allMonths = months;
+  selectedMonth = months[months.length - 1]; // latest month default
+  
+  document.getElementById('dateRange').textContent = 
+    `${dates[0]} → ${dates[dates.length-1]}`;
+  
+  renderTab();
+});
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach((el, i) => {
+    el.classList.toggle('active', ['daily','monthly','fy','bucket'][i] === tab);
+  });
+  // Destroy all charts
+  Object.values(chartInstances).forEach(c => { try { c.destroy(); } catch(e){} });
+  chartInstances = {};
+  renderTab();
+}
+
+function renderTab() {
+  const app = document.getElementById('app');
+  if (activeTab === 'daily') renderDaily(app);
+  else if (activeTab === 'monthly') renderMonthly(app);
+  else if (activeTab === 'fy') renderFY(app);
+  else if (activeTab === 'bucket') renderBucket(app);
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function fmt(n) {
+  if (n >= 1000) return '₹' + (n/1000).toFixed(1) + 'K';
+  return '₹' + n.toFixed(0);
+}
+function fmtBig(n) {
+  if (n >= 100000) return '₹' + (n/100000).toFixed(2) + 'L';
+  if (n >= 1000) return '₹' + (n/1000).toFixed(1) + 'K';
+  return '₹' + n.toFixed(0);
+}
+function fmtPct(g) {
+  if (g === null || g === undefined) return '';
+  const pct = (g * 100).toFixed(1);
+  return (g >= 0 ? '+' : '') + pct + '%';
+}
+function monthLabel(m) {
+  const [y,mo] = m.split('-');
+  return new Date(y, mo-1).toLocaleString('default',{month:'short',year:'2-digit'});
+}
+function getShowColor(show) {
+  const idx = allShows.indexOf(show);
+  return SHOW_COLORS[idx % SHOW_COLORS.length];
+}
+
+function makeChipFilter(container) {
+  container.innerHTML = `
+    <div class="filters">
+      <div class="filter-group">
+        <div class="filter-label">Shows</div>
+        <div class="show-chips" id="showChips">
+          ${allShows.map(s => `<div class="chip ${selectedShows.includes(s)?'active':''}" onclick="toggleShow('${s.replace(/'/g,"\\'")}',this)">${s}</div>`).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function toggleShow(show, el) {
+  if (selectedShows.includes(show)) {
+    if (selectedShows.length === 1) return; // keep at least 1
+    selectedShows = selectedShows.filter(s => s !== show);
+    el.classList.remove('active');
+  } else {
+    selectedShows.push(show);
+    el.classList.add('active');
+  }
+  // Destroy charts and re-render body
+  Object.values(chartInstances).forEach(c => { try { c.destroy(); } catch(e){} });
+  chartInstances = {};
+  renderTab();
+}
+
+// ============================================================
+// DAILY TAB
+// ============================================================
+function renderDaily(app) {
+  const monthOptions = allMonths.map(m => 
+    `<option value="${m}" ${m===selectedMonth?'selected':''}>${monthLabel(m)}</option>`
+  ).join('');
+  
+  app.innerHTML = `
+    <div class="filters">
+      <div class="filter-group">
+        <div class="filter-label">Month</div>
+        <select id="monthSel" onchange="changeMonth(this.value)">${monthOptions}</select>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Shows</div>
+        <div class="show-chips" id="showChips">
+          ${allShows.map(s => `<div class="chip ${selectedShows.includes(s)?'active':''}" onclick="toggleShow('${s.replace(/'/g,"\\'")}',this)">${s}</div>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div id="dailyKPIs" class="kpi-row"></div>
+    <div class="chart-card">
+      <div class="chart-title">Daily Revenue — ${monthLabel(selectedMonth)}</div>
+      <div class="chart-wrap" style="height:320px"><canvas id="dailyChart"></canvas></div>
+    </div>
+    <div class="table-card">
+      <div class="table-header">Day-by-Day Detail</div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr>
+          <th>Date</th>
+          ${selectedShows.map(s=>`<th>${s}</th>`).join('')}
+          <th>Total</th>
+        </tr></thead>
+        <tbody id="dailyTbody"></tbody>
+      </table></div>
+    </div>
+  `;
+  
+  const monthData = dailyData.filter(d => d.date.startsWith(selectedMonth) && selectedShows.includes(d.showShort));
+  const days = [...new Set(monthData.map(d => d.date))].sort();
+  
+  // KPI cards — latest day
+  const latestDay = days[days.length - 1];
+  const prevDay = days[days.length - 2];
+  const kpiEl = document.getElementById('dailyKPIs');
+  
+  selectedShows.forEach(show => {
+    const todayRec = monthData.find(d => d.date === latestDay && d.showShort === show);
+    const prevRec = prevDay ? monthData.find(d => d.date === prevDay && d.showShort === show) : null;
+    const rev = todayRec ? todayRec.revenue : 0;
+    const growth = todayRec ? todayRec.growth : null;
+    
+    let changeClass = 'neu', changeText = '— no data';
+    if (growth !== null) {
+      changeClass = growth >= 0 ? 'pos' : 'neg';
+      changeText = fmtPct(growth) + ' vs prev day';
+    }
+    kpiEl.innerHTML += `
+      <div class="kpi-card">
+        <div class="kpi-show" style="color:${getShowColor(show)}">${show}</div>
+        <div class="kpi-rev">${fmt(rev)}</div>
+        <div class="kpi-change ${changeClass}">${growth !== null ? (growth>=0?'▲':'▼') : '—'} ${changeText}</div>
+      </div>`;
+  });
+  
+  // Chart
+  const datasets = selectedShows.map((show, i) => {
+    const values = days.map(day => {
+      const rec = monthData.find(d => d.date === day && d.showShort === show);
+      return rec ? rec.revenue : 0;
+    });
+    return { label: show, data: values, borderColor: getShowColor(show), backgroundColor: getShowColor(show)+'20', tension: 0.3, fill: false, pointRadius: 3, pointHoverRadius: 5 };
+  });
+  
+  const ctx = document.getElementById('dailyChart').getContext('2d');
+  chartInstances.daily = new Chart(ctx, {
+    type: 'line',
+    data: { labels: days.map(d => d.slice(5)), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#7d8590', font: { size: 11 } } }, tooltip: { mode: 'index', intersect: false, callbacks: { label: ctx => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } } },
+      scales: {
+        x: { ticks: { color: '#7d8590', font: { size: 11 } }, grid: { color: '#21262d' } },
+        y: { ticks: { color: '#7d8590', callback: v => fmt(v), font: { size: 11 } }, grid: { color: '#21262d' } }
+      }
+    }
+  });
+  
+  // Table
+  const tbody = document.getElementById('dailyTbody');
+  // Show days in reverse order (newest first)
+  [...days].reverse().forEach(day => {
+    const showRevs = selectedShows.map(show => {
+      const rec = monthData.find(d => d.date === day && d.showShort === show);
+      return rec || null;
+    });
+    const total = showRevs.reduce((s, r) => s + (r ? r.revenue : 0), 0);
+    const cells = showRevs.map(r => {
+      if (!r) return '<td>—</td>';
+      const g = r.growth;
+      const cls = g === null ? '' : g >= 0 ? 'badge-pos' : 'badge-neg';
+      const arrow = g === null ? '' : g >= 0 ? ' ▲' : ' ▼';
+      const pct = g !== null ? `<span class="${cls}" style="font-size:11px">${arrow}${fmtPct(g)}</span>` : '';
+      return `<td>${fmt(r.revenue)} ${pct}</td>`;
+    }).join('');
+    tbody.innerHTML += `<tr><td style="color:var(--text-muted);white-space:nowrap">${day}</td>${cells}<td style="font-weight:700">${fmt(total)}</td></tr>`;
+  });
+}
+
+window.changeMonth = function(val) {
+  selectedMonth = val;
+  Object.values(chartInstances).forEach(c => { try { c.destroy(); } catch(e){} });
+  chartInstances = {};
+  renderTab();
+};
+
+// ============================================================
+// MONTHLY TAB
+// ============================================================
+function renderMonthly(app) {
+  app.innerHTML = `
+    <div class="filters">
+      <div class="filter-group">
+        <div class="filter-label">Shows</div>
+        <div class="show-chips" id="showChips">
+          ${allShows.map(s => `<div class="chip ${selectedShows.includes(s)?'active':''}" onclick="toggleShow('${s.replace(/'/g,"\\'")}',this)">${s}</div>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Monthly Revenue by Show</div>
+      <div class="chart-wrap" style="height:360px"><canvas id="monthlyChart"></canvas></div>
+    </div>
+    <div class="table-card">
+      <div class="table-header">Monthly Totals</div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr>
+          <th>Show</th>
+          ${allMonths.map(m=>`<th>${monthLabel(m)}</th>`).join('')}
+          <th>Total</th>
+        </tr></thead>
+        <tbody id="monthlyTbody"></tbody>
+      </table></div>
+    </div>
+  `;
+  
+  // Aggregate by month × show
+  const monthlyAgg = {};
+  dailyData.forEach(d => {
+    const m = d.date.slice(0,7);
+    const key = `${m}|${d.showShort}`;
+    monthlyAgg[key] = (monthlyAgg[key] || 0) + d.revenue;
+  });
+  
+  const datasets = selectedShows.map((show, i) => ({
+    label: show,
+    data: allMonths.map(m => monthlyAgg[`${m}|${show}`] || 0),
+    backgroundColor: getShowColor(show) + 'cc',
+    borderColor: getShowColor(show),
+    borderWidth: 1
+  }));
+  
+  const ctx = document.getElementById('monthlyChart').getContext('2d');
+  chartInstances.monthly = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: allMonths.map(monthLabel), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#7d8590', font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtBig(ctx.parsed.y)}` } } },
+      scales: {
+        x: { stacked: false, ticks: { color: '#7d8590', font: { size: 11 } }, grid: { color: '#21262d' } },
+        y: { ticks: { color: '#7d8590', callback: v => fmtBig(v), font: { size: 11 } }, grid: { color: '#21262d' } }
+      }
+    }
+  });
+  
+  const tbody = document.getElementById('monthlyTbody');
+  selectedShows.forEach(show => {
+    const monthRevs = allMonths.map(m => monthlyAgg[`${m}|${show}`] || 0);
+    const total = monthRevs.reduce((a,b) => a+b, 0);
+    const cells = monthRevs.map((v,i) => {
+      if (v === 0) return '<td style="color:var(--text-muted)">—</td>';
+      // MoM change
+      const prev = i > 0 ? monthRevs[i-1] : 0;
+      const chg = prev > 0 ? (v - prev) / prev : null;
+      const badge = chg !== null ? `<span class="${chg>=0?'badge-pos':'badge-neg'}" style="font-size:10px"> ${chg>=0?'▲':'▼'}${Math.abs(chg*100).toFixed(0)}%</span>` : '';
+      return `<td>${fmtBig(v)}${badge}</td>`;
+    }).join('');
+    tbody.innerHTML += `<tr><td style="font-weight:600;color:${getShowColor(show)}">${show}</td>${cells}<td style="font-weight:700">${fmtBig(total)}</td></tr>`;
+  });
+}
+
+// ============================================================
+// FY TAB
+// ============================================================
+function renderFY(app) {
+  // FY = April 2026 onwards (Indian FY Apr-Mar)
+  app.innerHTML = `
+    <div class="filters" style="margin-bottom:16px">
+      <div class="filter-group">
+        <div class="filter-label">Shows</div>
+        <div class="show-chips" id="showChips">
+          ${allShows.map(s => `<div class="chip ${selectedShows.includes(s)?'active':''}" onclick="toggleShow('${s.replace(/'/g,"\\'")}',this)">${s}</div>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div id="fyCards" class="fy-grid"></div>
+    <div class="chart-card">
+      <div class="chart-title">FY Revenue Trend (Cumulative by Show)</div>
+      <div class="chart-wrap" style="height:340px"><canvas id="fyChart"></canvas></div>
+    </div>
+    <div class="table-card">
+      <div class="table-header">FY Summary</div>
+      <table>
+        <thead><tr><th>Show</th><th>FY Total</th><th>Avg / Day</th><th>Peak Day Rev</th><th>Days Active</th></tr></thead>
+        <tbody id="fyTbody"></tbody>
+      </table>
+    </div>
+  `;
+  
+  // FY = Apr 2026 – Mar 2027 (data available Apr–Aug 2026)
+  const fyData = dailyData.filter(d => d.date >= '2026-04-01');
+  const fyAgg = {};
+  const fyDays = {};
+  const fyPeak = {};
+  fyData.forEach(d => {
+    if (!fyAgg[d.showShort]) { fyAgg[d.showShort] = 0; fyDays[d.showShort] = 0; fyPeak[d.showShort] = 0; }
+    fyAgg[d.showShort] += d.revenue;
+    fyDays[d.showShort]++;
+    if (d.revenue > fyPeak[d.showShort]) fyPeak[d.showShort] = d.revenue;
+  });
+  
+  const maxRev = Math.max(...selectedShows.map(s => fyAgg[s] || 0));
+  const fyCards = document.getElementById('fyCards');
+  selectedShows.forEach(show => {
+    const rev = fyAgg[show] || 0;
+    const days = fyDays[show] || 0;
+    const pct = maxRev > 0 ? (rev / maxRev * 100) : 0;
+    fyCards.innerHTML += `
+      <div class="fy-card">
+        <div class="fy-show" style="color:${getShowColor(show)}">${show}</div>
+        <div class="fy-rev">${fmtBig(rev)}</div>
+        <div class="fy-bar-wrap"><div class="fy-bar" style="width:${pct}%;background:${getShowColor(show)}"></div></div>
+        <div class="fy-sub">${days} active days · avg ${fmtBig(rev/(days||1))}/day</div>
+      </div>`;
+  });
+  
+  // Cumulative chart
+  const allFYDates = [...new Set(fyData.map(d => d.date))].sort();
+  const datasets = selectedShows.map((show) => {
+    let cum = 0;
+    const values = allFYDates.map(day => {
+      const rec = fyData.find(d => d.date === day && d.showShort === show);
+      cum += rec ? rec.revenue : 0;
+      return cum;
+    });
+    return { label: show, data: values, borderColor: getShowColor(show), fill: false, tension: 0.2, pointRadius: 0, borderWidth: 2 };
+  });
+  
+  const ctx = document.getElementById('fyChart').getContext('2d');
+  chartInstances.fy = new Chart(ctx, {
+    type: 'line',
+    data: { labels: allFYDates.map(d => d.slice(5)), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#7d8590', font:{size:11} } }, tooltip: { mode:'index', intersect:false, callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtBig(ctx.parsed.y)}` } } },
+      scales: {
+        x: { ticks: { color:'#7d8590', font:{size:10}, maxTicksLimit:12 }, grid:{color:'#21262d'} },
+        y: { ticks: { color:'#7d8590', callback: v=>fmtBig(v), font:{size:11} }, grid:{color:'#21262d'} }
+      }
+    }
+  });
+  
+  const tbody = document.getElementById('fyTbody');
+  const sorted = [...selectedShows].sort((a,b) => (fyAgg[b]||0) - (fyAgg[a]||0));
+  sorted.forEach(show => {
+    const rev = fyAgg[show] || 0;
+    const days = fyDays[show] || 0;
+    const avg = days > 0 ? rev/days : 0;
+    tbody.innerHTML += `<tr>
+      <td style="font-weight:600;color:${getShowColor(show)}">${show}</td>
+      <td style="font-weight:700">${fmtBig(rev)}</td>
+      <td>${fmtBig(avg)}</td>
+      <td>${fmtBig(fyPeak[show]||0)}</td>
+      <td>${days}</td>
+    </tr>`;
+  });
+}
+
+// ============================================================
+// BUCKET TAB
+// ============================================================
+function renderBucket(app) {
+  const weekOptions = getBucketWeeks();
+  const monthOptions = allMonths.map(m => 
+    `<option value="${m}" ${m===selectedMonth?'selected':''}>${monthLabel(m)}</option>`
+  ).join('');
+  
+  app.innerHTML = `
+    <div class="filters">
+      <div class="filter-group">
+        <div class="filter-label">View</div>
+        <select id="bucketView" onchange="changeBucketView(this.value)">
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      </div>
+      <div class="filter-group" id="bucketPeriodWrap">
+        <div class="filter-label">Period</div>
+        <select id="bucketPeriod" onchange="changeBucketPeriod(this.value)">
+          ${weekOptions}
+        </select>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Show</div>
+        <select id="bucketShow" onchange="changeBucketShow(this.value)">
+          ${allShows.map(s=>`<option value="${s}" ${s===allShows[0]?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title" id="bucketChartTitle">10% Bucket Revenue Distribution</div>
+      <div class="chart-wrap" style="height:360px"><canvas id="bucketChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Bucket Revenue Trend Over Time</div>
+      <div class="chart-wrap" style="height:340px"><canvas id="bucketTrendChart"></canvas></div>
+    </div>
+    <div class="table-card">
+      <div class="table-header">Bucket Detail</div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Bucket</th><th>Revenue</th><th>% of Total</th></tr></thead>
+        <tbody id="bucketTbody"></tbody>
+      </table></div>
+    </div>
+  `;
+  
+  renderBucketCharts();
+}
+
+function getBucketWeeks() {
+  const dates = [...new Set(blockData.map(d => d.date))].sort();
+  const weeks = {};
+  dates.forEach(d => {
+    const dt = new Date(d);
+    const day = dt.getDay();
+    const diff = dt.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(dt.setDate(diff));
+    const wk = monday.toISOString().slice(0,10);
+    weeks[wk] = true;
+  });
+  const weekList = Object.keys(weeks).sort();
+  const latestWeek = weekList[weekList.length - 1];
+  return weekList.map(w => {
+    const end = new Date(w); end.setDate(end.getDate() + 6);
+    const label = `${w.slice(5)} – ${end.toISOString().slice(5,10)}`;
+    return `<option value="${w}" ${w===latestWeek?'selected':''}>${label}</option>`;
+  }).join('');
+}
+
+window._bucketView = 'weekly';
+window._bucketPeriod = null;
+window._bucketShow = null;
+
+function renderBucketCharts() {
+  const view = document.getElementById('bucketView').value;
+  window._bucketView = view;
+  const show = document.getElementById('bucketShow').value;
+  window._bucketShow = show;
+  const period = document.getElementById('bucketPeriod') ? document.getElementById('bucketPeriod').value : selectedMonth;
+  window._bucketPeriod = period;
+  
+  // Update period dropdown if view changed
+  if (view === 'monthly') {
+    document.getElementById('bucketPeriodWrap').innerHTML = `
+      <div class="filter-label">Month</div>
+      <select id="bucketPeriod" onchange="changeBucketPeriod(this.value)">
+        ${allMonths.map(m=>`<option value="${m}" ${m===selectedMonth?'selected':''}>${monthLabel(m)}</option>`).join('')}
+      </select>`;
+    window._bucketPeriod = selectedMonth;
+  }
+  
+  // Filter block data
+  let filtered;
+  if (view === 'weekly') {
+    const weekStart = new Date(period);
+    const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
+    const wEnd = weekEnd.toISOString().slice(0,10);
+    filtered = blockData.filter(d => d.showShort === show && d.date >= period && d.date <= wEnd);
+  } else {
+    filtered = blockData.filter(d => d.showShort === show && d.date.startsWith(period));
+  }
+  
+  // Aggregate by bucket
+  const bucketTotals = {};
+  BUCKETS.forEach(b => bucketTotals[b] = 0);
+  filtered.forEach(d => { if (bucketTotals[d.bucket] !== undefined) bucketTotals[d.bucket] += d.revenue; });
+  
+  const total = Object.values(bucketTotals).reduce((a,b)=>a+b,0);
+  
+  document.getElementById('bucketChartTitle').textContent = 
+    `10% Bucket Revenue — ${show} (${view === 'weekly' ? 'Week of ' + period : monthLabel(period)})`;
+  
+  // Bar chart
+  ['bucketChart','bucketTrendChart'].forEach(id => {
+    if (chartInstances[id]) { try { chartInstances[id].destroy(); } catch(e){} }
+  });
+  
+  const ctx1 = document.getElementById('bucketChart').getContext('2d');
+  chartInstances.bucketChart = new Chart(ctx1, {
+    type: 'bar',
+    data: {
+      labels: BUCKETS,
+      datasets: [{
+        label: 'Revenue',
+        data: BUCKETS.map(b => bucketTotals[b]),
+        backgroundColor: BUCKET_COLORS,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${fmt(ctx.parsed.y)} (${total>0?(ctx.parsed.y/total*100).toFixed(1):0}%)` } } },
+      scales: {
+        x: { ticks:{color:'#7d8590',font:{size:11}}, grid:{color:'#21262d'} },
+        y: { ticks:{color:'#7d8590',callback:v=>fmt(v),font:{size:11}}, grid:{color:'#21262d'} }
+      }
+    }
+  });
+  
+  // Trend chart — bucket revenue over multiple periods
+  const trendPeriods = view === 'weekly' ? getWeeklyPeriods() : allMonths.slice(-6);
+  const trendDatasets = BUCKETS.map((b,i) => ({
+    label: b,
+    data: trendPeriods.map(p => {
+      let pFiltered;
+      if (view === 'weekly') {
+        const ws = new Date(p); const we = new Date(p); we.setDate(we.getDate()+6);
+        pFiltered = blockData.filter(d => d.showShort===show && d.date>=p && d.date<=we.toISOString().slice(0,10) && d.bucket===b);
+      } else {
+        pFiltered = blockData.filter(d => d.showShort===show && d.date.startsWith(p) && d.bucket===b);
+      }
+      return pFiltered.reduce((s,d)=>s+d.revenue,0);
+    }),
+    backgroundColor: BUCKET_COLORS[i],
+    borderColor: BUCKET_COLORS[i],
+    borderWidth: 1
+  }));
+  
+  const ctx2 = document.getElementById('bucketTrendChart').getContext('2d');
+  chartInstances.bucketTrendChart = new Chart(ctx2, {
+    type: 'bar',
+    data: {
+      labels: trendPeriods.map(p => view==='weekly' ? p.slice(5) : monthLabel(p)),
+      datasets: trendDatasets
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels:{color:'#7d8590',font:{size:10},boxWidth:12} }, tooltip: { mode:'index', intersect:false } },
+      scales: {
+        x: { stacked:true, ticks:{color:'#7d8590',font:{size:11}}, grid:{color:'#21262d'} },
+        y: { stacked:true, ticks:{color:'#7d8590',callback:v=>fmt(v),font:{size:11}}, grid:{color:'#21262d'} }
+      }
+    }
+  });
+  
+  // Table
+  const tbody = document.getElementById('bucketTbody');
+  tbody.innerHTML = '';
+  BUCKETS.forEach((b,i) => {
+    const rev = bucketTotals[b];
+    const pct = total > 0 ? (rev/total*100).toFixed(1) : '0.0';
+    tbody.innerHTML += `<tr>
+      <td><span style="display:inline-block;width:12px;height:12px;background:${BUCKET_COLORS[i]};border-radius:2px;margin-right:8px;vertical-align:middle"></span>${b}</td>
+      <td style="font-weight:600">${fmt(rev)}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="background:${BUCKET_COLORS[i]};height:6px;width:${pct}%;max-width:100px;border-radius:3px"></div>
+          ${pct}%
+        </div>
+      </td>
+    </tr>`;
+  });
+}
+
+function getWeeklyPeriods() {
+  const dates = [...new Set(blockData.map(d => d.date))].sort();
+  const weeks = new Set();
+  dates.forEach(d => {
+    const dt = new Date(d);
+    const day = dt.getDay();
+    const diff = dt.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(dt); monday.setDate(diff);
+    weeks.add(monday.toISOString().slice(0,10));
+  });
+  return [...weeks].sort().slice(-8); // last 8 weeks
+}
+
+window.changeBucketView = function(v) {
+  window._bucketView = v;
+  Object.keys(chartInstances).forEach(k => { try { chartInstances[k].destroy(); } catch(e){} chartInstances = {}; });
+  renderBucketCharts();
+};
+window.changeBucketPeriod = function(v) {
+  window._bucketPeriod = v;
+  Object.keys(chartInstances).forEach(k => { try { chartInstances[k].destroy(); } catch(e){} chartInstances = {}; });
+  renderBucketCharts();
+};
+window.changeBucketShow = function(v) {
+  window._bucketShow = v;
+  Object.keys(chartInstances).forEach(k => { try { chartInstances[k].destroy(); } catch(e){} chartInstances = {}; });
+  renderBucketCharts();
+};
+</script>
+</body>
+</html>
